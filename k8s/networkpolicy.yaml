@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# WARNING: This NetworkPolicy is a STARTING POINT, not a working drop-in.
+# In the original cluster this policy BROKE ingress traffic (the site hung)
+# because the ingress-controller flow did not match the ingress rule, and it
+# was removed to restore service. Test it in a non-prod namespace first and
+# confirm the ingress selector matches YOUR controller's namespace/labels.
+# All IPs below are placeholders — replace with your own DB/NFS addresses.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: odoo-allow
+  namespace: odoo
+spec:
+  podSelector:
+    matchLabels:
+      app: odoo
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # Verify this label matches your ingress controller's namespace.
+              kubernetes.io/metadata.name: ingress
+      ports:
+        - { protocol: TCP, port: 8069 }
+        - { protocol: TCP, port: 8072 }
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - ipBlock: { cidr: 10.0.0.20/32 }    # <-- your PostgreSQL host
+      ports:
+        - { protocol: TCP, port: 5432 }       # <-- your PostgreSQL port
+    - to:
+        - ipBlock: { cidr: 10.0.0.10/32 }    # <-- your NFS server
+      ports:
+        - { protocol: TCP, port: 2049 }
+        - { protocol: UDP, port: 2049 }
+        - { protocol: TCP, port: 111 }
+        - { protocol: UDP, port: 111 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+      ports:
+        - { protocol: TCP, port: 443 }   # outbound HTTPS (Let's Encrypt, etc.)
+        - { protocol: TCP, port: 587 }   # SMTP submission
+        - { protocol: TCP, port: 465 }
+        - { protocol: TCP, port: 25 }
