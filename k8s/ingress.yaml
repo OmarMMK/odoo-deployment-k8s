@@ -1,0 +1,53 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: odoo-ingress
+  namespace: odoo
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    # Sticky sessions: Odoo holds session state, so pin a client to one pod.
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "INGRESSCOOKIE"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-samesite: "Lax"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    #
+    # WARNING — server-snippet is intentionally NOT used here.
+    # On ingress-nginx >= v1.12 the default annotations-risk-level is "High",
+    # which REJECTS server-snippet/configuration-snippet and silently prevents
+    # the ENTIRE ingress from rendering (you get 404s with a healthy-looking
+    # controller). See the project README, Lesson 3.
+    # The database manager is locked down at the application layer instead
+    # (list_db=False + dbfilter in configmap.yaml), which is the correct fix.
+    # If you truly need snippets, set annotations-risk-level=Critical on the
+    # controller and understand you are re-opening that risk.
+spec:
+  ingressClassName: public           # "nginx" on a standard ingress-nginx install
+  tls:
+    - hosts:
+        - odoo.example.com           # <-- replace with your domain
+      secretName: odoo-tls
+  rules:
+    - host: odoo.example.com         # <-- replace with your domain
+      http:
+        paths:
+          - path: /websocket
+            pathType: Prefix
+            backend:
+              service: { name: odoo-svc, port: { number: 8072 } }
+          - path: /longpolling
+            pathType: Prefix
+            backend:
+              service: { name: odoo-svc, port: { number: 8072 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: odoo-svc, port: { number: 8069 } }
