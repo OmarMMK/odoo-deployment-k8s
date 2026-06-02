@@ -1,0 +1,109 @@
+name: Build and Deploy Production
+
+on:
+  workflow_dispatch:   # manual only — never runs automatically
+
+env:
+  PROD_TAG: prod-latest
+  # Image repo name under your GHCR account. Change "odoo" if you like.
+  IMAGE_REPO: odoo
+
+# ---------------------------------------------------------------------------
+# NOTE: This workflow is published as an educational reference. It does NOT
+# run automatically. To actually use it you must:
+#   1. Add repo secrets GHCR_USERNAME and GHCR_TOKEN (a GitHub PAT with
+#      write:packages).
+#   2. Register a self-hosted runner with labels [self-hosted, prod] on a
+#      node that has MicroK8s, OR replace the deploy job with kubectl steps
+#      against your own kubeconfig.
+#   3. Trigger it manually from the Actions tab ("Run workflow").
+# ---------------------------------------------------------------------------
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set image name
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=ghcr.io/${OWNER}/${IMAGE_REPO}" >> $GITHUB_ENV
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.PROD_TAG }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    # Self-hosted runner on a cluster node that has MicroK8s.
+    runs-on: [self-hosted, prod]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set image name
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=ghcr.io/${OWNER}/${IMAGE_REPO}" >> $GITHUB_ENV
+
+      - name: Verify MicroK8s
+        run: microk8s status --wait-ready
+
+      - name: Apply Kubernetes manifests
+        run: microk8s kubectl apply -f k8s/
+
+      - name: Update deployment image (pin to commit SHA)
+        run: |
+          microk8s kubectl -n odoo set image deployment/odoo \
+            odoo=${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Show deployment image
+        run: |
+          microk8s kubectl -n odoo get deployment odoo \
+            -o=jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+
+      - name: Wait for rollout
+        run: microk8s kubectl -n odoo rollout status deployment/odoo --timeout=10m
+
+      - name: Show rollout history
+        run: microk8s kubectl -n odoo rollout history deployment/odoo
+
+      - name: Show pods
+        run: microk8s kubectl get pods -n odoo -o wide
+
+      - name: Show services and endpoints
+        run: |
+          microk8s kubectl get svc -n odoo
+          microk8s kubectl get endpoints -n odoo
+
+      - name: Show pod logs on failure
+        if: failure()
+        run: |
+          for p in $(microk8s kubectl get pods -n odoo -o name); do
+            echo "=== $p ==="
+            microk8s kubectl logs -n odoo "$p" --tail=200 || true
+          done
+
+      - name: Describe resources on failure
+        if: failure()
+        run: |
+          microk8s kubectl describe deployment odoo -n odoo || true
+          microk8s kubectl describe svc odoo-svc -n odoo || true
+          microk8s kubectl describe ingress odoo-ingress -n odoo || true
