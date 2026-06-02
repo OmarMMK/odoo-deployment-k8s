@@ -9,22 +9,25 @@ A production-style reference for self-hosting Odoo 17 on a small, self-managed K
 
 <img width="1536" height="1024" alt="odoo-setup" src="https://github.com/user-attachments/assets/8b202440-e6a3-4a4d-b077-a36cd39d4e78" />
 
-📂 Layout
-Path	What it is
-k8s/namespace.yaml	Odoo namespace
-k8s/cluster-issuer.yaml	cert-manager Let's Encrypt issuer (set your email)
-k8s/configmap.yaml	Odoo config template — list_db=False, hardened limits
-k8s/deployment.yaml	Odoo Deployment + init-container that renders config from Secrets
-k8s/service.yaml	ClusterIP service (8069 http, 8072 longpolling)
-k8s/ingress.yaml	Ingress + TLS (set your domain)
-k8s/pv.yaml / pvc.yaml	NFS filestore (set your NFS server)
-k8s/pdb.yaml, quota.yaml	PodDisruptionBudget, ResourceQuota/LimitRange
-k8s/networkpolicy.yaml	Starting point only — ⚠️ see warning in the file
-k8s/monitoring.yaml	Loki + Promtail + Prometheus + Grafana + exporters
-k8s/grafana-dashboard.yaml	Provisioned Grafana dashboard
-Dockerfile	Odoo image with your custom addons (Community only by default)
-.github/workflows/deploy-prod.yml	Build → push to GHCR → deploy via self-hosted runners
-secrets/*.example.yaml	Secret shapes — real secrets created with kubectl, never committed
+## 📂 Layout  
+
+| Path                                | What it is                                                                 |
+|-------------------------------------|----------------------------------------------------------------------------|
+| `k8s/namespace.yaml`                | Odoo namespace                                                             |
+| `k8s/cluster-issuer.yaml`           | cert-manager Let's Encrypt issuer (set your email)                         |
+| `k8s/configmap.yaml`                | Odoo config template — `list_db=False`, hardened limits                    |
+| `k8s/deployment.yaml`               | Odoo Deployment + init-container that renders config from Secrets          |
+| `k8s/service.yaml`                  | ClusterIP service (8069 http, 8072 longpolling)                            |
+| `k8s/ingress.yaml`                  | Ingress + TLS (set your domain)                                            |
+| `k8s/pv.yaml` / `pvc.yaml`          | NFS filestore (set your NFS server)                                        |
+| `k8s/pdb.yaml`, `quota.yaml`        | PodDisruptionBudget, ResourceQuota/LimitRange                              |
+| `k8s/networkpolicy.yaml`            | Starting point only — ⚠️ see warning in the file                           |
+| `k8s/monitoring.yaml`               | Loki + Promtail + Prometheus + Grafana + exporters                         |
+| `k8s/grafana-dashboard.yaml`        | Provisioned Grafana dashboard                                              |
+| `Dockerfile`                        | Odoo image with your custom addons (Community only by default)             |
+| `.github/workflows/deploy-prod.yml` | Build → push to GHCR → deploy via self-hosted runners              |
+| `secrets/*.example.yaml`            | Secret shapes — real secrets created with kubectl, never committed         |
+
 
 
 ⚡ Quick Start
