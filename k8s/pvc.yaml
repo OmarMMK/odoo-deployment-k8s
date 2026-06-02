@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: odoo-filestore-pvc
+  namespace: odoo
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 100Gi
+  volumeName: pv-odoo-filestore
+  storageClassName: ""
