@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: odoo-quota
+  namespace: odoo
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "16Gi"
+    limits.cpu: "16"
+    limits.memory: "32Gi"
+    pods: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: odoo-limits
+  namespace: odoo
+spec:
+  limits:
+    - type: Container
+      default:        { cpu: "500m", memory: "512Mi" }
+      defaultRequest: { cpu: "100m", memory: "128Mi" }
+      max:            { cpu: "4",    memory: "8Gi" }
