@@ -25,7 +25,7 @@ A production-style reference for self-hosting Odoo 17 on a small, self-managed K
 | `k8s/monitoring.yaml`               | Loki + Promtail + Prometheus + Grafana + exporters                         |
 | `k8s/grafana-dashboard.yaml`        | Provisioned Grafana dashboard                                              |
 | `Dockerfile`                        | Odoo image with your custom addons (Community only by default)             |
-| `.github/workflows/deploy-prod.yml` | Build → push to GHCR → deploy via self-hosted runners              |
+| `.github/workflow.yaml`             | Build → push to GHCR → deploy via self-hosted runners                      |
 | `secrets/*.example.yaml`            | Secret shapes — real secrets created with kubectl, never committed         |
 
 
