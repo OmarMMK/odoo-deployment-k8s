@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odoo
+  namespace: odoo
+spec:
+  replicas: 2
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Old pod terminates BEFORE the new one starts -> no deploy-time overlap.
+      # Trade-off: a few seconds of downtime per deploy. Correct for an app
+      # whose addons are not safe under concurrent writes (README, Lesson 4).
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: odoo
+  template:
+    metadata:
+      labels:
+        app: odoo
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - { key: app, operator: In, values: [odoo] }
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      imagePullSecrets:
+        - name: ghcr-secret
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        # Renders odoo.conf from the ConfigMap template + Secrets into an
+        # in-memory volume. Secrets never land on node disk and are never
+        # passed as command-line args.
+        - name: render-config
+          image: busybox:1.36
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              set -eu
+              umask 077
+              cp /tpl/odoo.conf.template /rendered/odoo.conf
+              cat >> /rendered/odoo.conf <<CONF
+
+              admin_passwd = ${ADMIN_PASSWD}
+              db_host = ${DB_HOST}
+              db_port = ${DB_PORT}
+              db_user = ${DB_USER}
+              db_password = ${DB_PASSWORD}
+              db_name = ${DB_NAME}
+              CONF
+              chmod 0440 /rendered/odoo.conf
+          env:
+            - { name: ADMIN_PASSWD, valueFrom: { secretKeyRef: { name: odoo-master-secret, key: admin_passwd } } }
+            - { name: DB_HOST,     valueFrom: { secretKeyRef: { name: odoo-db-secret, key: db_host } } }
+            - { name: DB_PORT,     valueFrom: { secretKeyRef: { name: odoo-db-secret, key: db_port } } }
+            - { name: DB_USER,     valueFrom: { secretKeyRef: { name: odoo-db-secret, key: db_user } } }
+            - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: odoo-db-secret, key: db_password } } }
+            - { name: DB_NAME,     valueFrom: { secretKeyRef: { name: odoo-db-secret, key: db_name } } }
+          volumeMounts:
+            - { name: odoo-config-template, mountPath: /tpl }
+            - { name: odoo-config-rendered, mountPath: /rendered }
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      containers:
+        - name: odoo
+          # Replace YOUR_GITHUB_USERNAME and image name to match your GHCR repo.
+          image: ghcr.io/YOUR_GITHUB_USERNAME/odoo:prod-latest
+          imagePullPolicy: IfNotPresent
+          command: ["odoo", "--config", "/etc/odoo/odoo.conf"]
+          ports:
+            - { containerPort: 8069, name: http }
+            - { containerPort: 8072, name: longpoll }
+          volumeMounts:
+            - { name: filestore, mountPath: /var/lib/odoo }
+            - { name: odoo-config-rendered, mountPath: /etc/odoo, readOnly: true }
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits:   { cpu: "2",    memory: "3Gi" }
+          # Generous startupProbe lets long module migrations finish without
+          # the liveness probe killing the pod mid-upgrade.
+          startupProbe:
+            httpGet: { path: /web/login, port: 8069 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /web/login, port: 8069 }
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /web/login, port: 8069 }
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: odoo-config-template
+          configMap:
+            name: odoo-config
+            items:
+              - { key: odoo.conf.template, path: odoo.conf.template }
+        - name: odoo-config-rendered
+          emptyDir: { medium: Memory }
+        - name: filestore
+          persistentVolumeClaim:
+            claimName: odoo-filestore-pvc
